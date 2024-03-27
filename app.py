@@ -9,15 +9,17 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn import metrics
 from matplotlib import pyplot as plt
-import math
+import math, os
 
 from xverse.transformer import MonotonicBinning,WOE
 from sklearn.metrics import classification_report
 
 def loadData():
   url = 'https://cdn.iisc.talentsprint.com/CDS/MiniProjects/GiveMeSomeCredit.csv'
-  filename = wget.download(url)
-  df = pd.read_csv(filename)
+  file_name = url.split("/")[-1]
+  if(not os.path.exists(file_name)):
+    wget.download(url, file_name)
+  df = pd.read_csv(file_name)
   return df
 
 def plot_for_all_cols(df: pd.DataFrame, plot_kind = 'box'):
@@ -126,11 +128,11 @@ def main():
   df = loadData()
   print(df.head())
   df = df.drop(columns=['Unnamed: 0'])
-  st.write('# Histogram Plot')
-  plot_for_all_cols(df, 'hist')
+  # st.write('# Histogram Plot')
+  # plot_for_all_cols(df, 'hist')
 
-  st.write('# Box Plot')
-  plot_for_all_cols(df, 'box')
+  # st.write('# Box Plot')
+  # plot_for_all_cols(df, 'box')
 
   X_train, X_test, y_train, y_test = train_test_split_helper(df, 'SeriousDlqin2yrs')
 
@@ -193,11 +195,14 @@ def main():
   y_pred = lg_clf.predict(X_test_sel_features_trans)
   st.dataframe(pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)))
 
+  # https://www.analyticsvidhya.com/blog/2020/10/improve-class-imbalance-class-weights/
+  # Grid Search can be used to find optimal class weights
   st.write('### Balanced Model')
   lg_clf = train_using_logistic(X_train_transformed, y_train, isBalanced = True)
   y_pred = lg_clf.predict(X_test_transformed)
   st.dataframe(pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)))
-  
+  lg_clf_final = lg_clf
+
   st.write('### Balanced Model using only few features with IV > 0.15')
   X_trian_sel_features_trans = X_train_transformed[selected_features_df['Variable_Name']]
   X_test_sel_features_trans = X_test_transformed[selected_features_df['Variable_Name']]
@@ -205,4 +210,41 @@ def main():
   y_pred = lg_clf.predict(X_test_sel_features_trans)
   st.dataframe(pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)))
 
+  st.write('# Credit Scoring')
+  '''
+    When scaling the model into a scorecard, we will need both the Logistic Regression coefficients from model fitting as well as the transformed WoE values. We will also need to convert the score from the model from the log-odds unit to a points system. For each independent variable Xi, its corresponding score is:
+
+    $Score = \sum_{i=1}^{n} (-(β_i × WoE_i + \frac{α}{n}) × Factor + \frac{Offset}{n})$    Where:
+    βi — logistic regression coefficient for the variable Xi
+
+    α — logistic regression intercept
+
+    WoE — Weight of Evidence value for variable Xi
+
+    n — number of independent variable Xi in the model
+
+    Factor, Offset — known as scaling parameter
+
+    Factor = pdo / ln(2); pdo is points to double the odds
+    Offset = Round_of_Score - {Factor * ln(Odds)}
+  '''
+  st.write('## Tranining Data')
+  score_df = get_credit_scoring(X_train_transformed, lg_clf_final)
+  st.dataframe(score_df)
+
+  st.write('## Test Data')
+  score_df_test = get_credit_scoring(X_test_transformed, lg_clf_final)
+  st.dataframe(score_df_test)
+
+def get_credit_scoring(X_train_transformed, lg_clf_final):
+    factor = 20/np.log(2)
+    offset = 600 - ( factor * np.log(50))
+    st.write(factor, offset)
+    n  = len(X_train_transformed.columns)
+    score_df = (X_train_transformed  * lg_clf_final.coef_)  
+    score_df += np.zeros((1, n)) + lg_clf_final.intercept_/n
+    score_df *= (-1 * factor)
+    score_df += np.zeros((1, n)) + offset/n
+    score_df['score'] = score_df.sum(axis = 1)
+    return score_df
 main()
