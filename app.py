@@ -211,10 +211,12 @@ def main():
   st.dataframe(pd.DataFrame(classification_report(y_test, y_pred, output_dict=True)))
 
   st.write('# Credit Scoring')
-  '''
+  doc = r'''
     When scaling the model into a scorecard, we will need both the Logistic Regression coefficients from model fitting as well as the transformed WoE values. We will also need to convert the score from the model from the log-odds unit to a points system. For each independent variable Xi, its corresponding score is:
 
-    $Score = \sum_{i=1}^{n} (-(β_i × WoE_i + \frac{α}{n}) × Factor + \frac{Offset}{n})$    Where:
+    $Score = \sum_{i=1}^{n} (-(β_i × WoE_i + \frac{α}{n}) × Factor + \frac{Offset}{n})$
+    
+    Where:
     βi — logistic regression coefficient for the variable Xi
 
     α — logistic regression intercept
@@ -228,6 +230,7 @@ def main():
     Factor = pdo / ln(2); pdo is points to double the odds
     Offset = Round_of_Score - {Factor * ln(Odds)}
   '''
+  st.write(doc)
   st.write('## Tranining Data')
   score_df = get_credit_scoring(X_train_transformed, lg_clf_final)
   st.dataframe(score_df)
